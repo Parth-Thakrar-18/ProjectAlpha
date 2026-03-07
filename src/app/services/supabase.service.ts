@@ -23,21 +23,21 @@ export class SupabaseService {
   async InsertData(formData: any): Promise<any> {
 
     const { data, error } = await this.supabase
-    .from('login_users')
-    .insert([
-      {
-        first_name: formData.firstName,
-        last_name: formData.lastName,
-        email: formData.email,
-        password: formData.password
-      }
-    ]);
+      .from('login_users')
+      .insert([
+        {
+          first_name: formData.firstName,
+          last_name: formData.lastName,
+          email: formData.email,
+          password: formData.password
+        }
+      ]);
 
-  if (error) {
-    console.error('Insert error:', error);
-  }
+    if (error) {
+      console.error('Insert error:', error);
+    }
 
-  return data;
+    return data;
   }
   async sendOtp(email: string) {
     const { user, error } = await this.supabase.auth.signIn({
@@ -47,5 +47,14 @@ export class SupabaseService {
     return { data: user, error };
   }
 
- 
+  async verifyOtp(email: string, token: string) {
+    const { session, error } = await this.supabase.auth.verifyOTP({
+      email,
+      token,
+      type: 'magiclink'
+    });
+    return { session, error };
+  }
+
+
 }
