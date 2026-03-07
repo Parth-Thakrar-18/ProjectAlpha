@@ -19,8 +19,13 @@ export class OTPComponent implements OnInit, AfterViewInit {
   @ViewChildren('otpInput') otpInputs!: QueryList<ElementRef>;
 
   constructor(private fb: FormBuilder, private router: Router,
-   private supabaseService: SupabaseService,
-  ) { }
+    private supabaseService: SupabaseService,
+  ) {
+    const navigation = this.router.getCurrentNavigation();
+    if (navigation?.extras?.state) {
+      this.email = navigation.extras.state.email;
+    }
+  }
 
   ngOnInit(): void {
     this.otpForm = this.fb.group({
@@ -41,7 +46,7 @@ export class OTPComponent implements OnInit, AfterViewInit {
 
   onInputEvent(event: any, index: number) {
     const value = event.target.value;
-    
+
     // Only allow numbers
     if (value && !/^[0-9]$/.test(value)) {
       this.digitsArr.at(index).setValue('');
@@ -64,7 +69,7 @@ export class OTPComponent implements OnInit, AfterViewInit {
       this.otpInputs.toArray()[index]?.nativeElement.focus();
     });
   }
-  
+
   onPaste(event: ClipboardEvent) {
     event.preventDefault();
     const pastedData = event.clipboardData?.getData('text');
@@ -84,33 +89,39 @@ export class OTPComponent implements OnInit, AfterViewInit {
   async verifyOTP(): Promise<void> {
     this.submitted = true;
     this.errorMessage = '';
-    
+
     if (this.otpForm.invalid) {
       this.otpForm.markAllAsTouched();
       return;
     }
 
     this.isLoading = true;
-    
-    // Simulating validation
+
     const otpValue = this.digitsArr.value.join('');
-    
-    setTimeout(() => {
-      if (otpValue === '123456') { // We consider 123456 as valid for demo
+    // Use the email that the OTP was sent to (hardcoded for now as it is in sendOtp)
+    const targetEmail = this.email || 'parththakrar00@gmail.com';
+
+    try {
+      const { session, error } = await this.supabaseService.verifyOtp(targetEmail, otpValue);
+
+      if (error) {
+        this.errorMessage = 'Invalid OTP code. Please try again.';
+        this.isLoading = false;
+        this.digitsArr.controls.forEach(control => control.setValue(''));
+        this.focusInput(0);
+      } else {
         this.successMessage = 'OTP Verified! Redirecting...';
         setTimeout(() => {
           this.isLoading = false;
           this.router.navigate(['/dashboard']);
         }, 1000);
-      } else {
-        this.errorMessage = 'Invalid OTP code. Try "123456"';
-        this.isLoading = false;
-        this.digitsArr.controls.forEach(control => control.setValue(''));
-        this.focusInput(0);
       }
-    }, 1500);
+    } catch (err: any) {
+      this.errorMessage = err.message || 'An error occurred. Please try again.';
+      this.isLoading = false;
+    }
   }
-  
+
   resendOTP() {
     this.errorMessage = '';
     this.successMessage = 'A new OTP has been sent to your email.';
@@ -118,21 +129,35 @@ export class OTPComponent implements OnInit, AfterViewInit {
   }
 
   async sendOtp() {
+    this.isLoading = true;
+    this.errorMessage = '';
+    this.successMessage = '';
 
-    const { error } = await this.supabaseService.sendOtp("parththakrar00@gmail.com");
+    // Fallback to demo email if not populated, but typically passed from previous logic
+    const targetEmail = this.email;
 
-    if (error) {
-      alert(error.message);
-    } else {
-      alert("OTP sent to email");
+    try {
+      const { error } = await this.supabaseService.sendOtp(targetEmail);
+
+      if (error) {
+        this.errorMessage = error.message;
+      } else {
+        this.successMessage = `OTP sent to ${targetEmail}`;
+        // Optionally clear success message after 5 seconds
+        setTimeout(() => this.successMessage = '', 5000);
+      }
+    } catch (err: any) {
+      this.errorMessage = err.message || 'Failed to send OTP';
+    } finally {
+      this.isLoading = false;
     }
   }
 
   async verifyOtp() {
-  const user = this.supabaseService.supabase.auth.user();
+    const user = this.supabaseService.supabase.auth.user();
 
-  if (user) {
-    this.router.navigate(['/dashboard']);
+    if (user) {
+      this.router.navigate(['/dashboard']);
+    }
   }
-}
 }

@@ -14,11 +14,12 @@ export class LoginComponent implements OnInit {
   errorMessage: string = '';
   successMessage: string = '';
   @Output() switchToSignup = new EventEmitter<void>();
+  email: any;
 
   constructor(private formBuilder: FormBuilder,
     private supabaseService: SupabaseService,
-    private router:Router
-  ) {}
+    private router: Router
+  ) { }
 
   ngOnInit(): void {
     this.initializeForm();
@@ -36,39 +37,39 @@ export class LoginComponent implements OnInit {
     return this.loginForm.controls;
   }
 
-async onSubmit(): Promise<void> {
-  this.submitted = true;
-  this.errorMessage = '';
-  this.successMessage = '';
+  async onSubmit(): Promise<void> {
+    this.submitted = true;
+    this.errorMessage = '';
+    this.successMessage = '';
 
-  if (this.loginForm.invalid) {
-    return;
+    if (this.loginForm.invalid) {
+      return;
+    }
+
+    this.isLoading = true;
+
+    const { email, password } = this.loginForm.value;
+
+    const users = await this.supabaseService.getData();
+    const user = users?.find((u: any) => u.email === email);
+    if (!user) {
+      this.errorMessage = 'No user found';
+      this.isLoading = false;
+      return;
+    }
+    if (user.password !== password) {
+      this.errorMessage = 'Incorrect password';
+      this.isLoading = false;
+      return;
+    }
+
+    this.successMessage = 'Login successful!';
+
+    setTimeout(() => {
+      this.isLoading = false;
+      this.router.navigate(['/otp']);
+    }, 1000);
   }
-
-  this.isLoading = true;
-
-  const { email, password } = this.loginForm.value;
-
-  const users = await this.supabaseService.getData();
-  const user = users?.find((u: any) => u.email === email);
-  if (!user) {
-    this.errorMessage = 'No user found';
-    this.isLoading = false;
-    return;
-  }
-  if (user.password !== password) {
-    this.errorMessage = 'Incorrect password';
-    this.isLoading = false;
-    return;
-  }
-
-  this.successMessage = 'Login successful!';
-
-  setTimeout(() => {
-    this.isLoading = false;
-    this.router.navigate(['/otp']);
-  }, 1000);
-}
 
   resetForm(): void {
     this.loginForm.reset();
@@ -84,4 +85,39 @@ async onSubmit(): Promise<void> {
   createAccount(): void {
     this.router.navigate(['/signup']);
   }
+  async sendOtp() {
+    this.isLoading = true;
+    this.errorMessage = '';
+    this.successMessage = '';
+
+    // Fallback to demo email if not populated, but typically passed from previous logic
+    const targetEmail = this.loginForm.value.email;
+
+    try {
+      const { error } = await this.supabaseService.sendOtp(targetEmail);
+
+      if (error) {
+        this.errorMessage = error.message;
+      } else {
+        this.successMessage = `OTP sent to ${targetEmail}`;
+        // Optionally clear success message after 5 seconds
+        setTimeout(() => this.successMessage = '', 5000);
+        this.router.navigate(['/otp'], { state: { email: targetEmail } });
+      }
+    } catch (err: any) {
+      this.errorMessage = err.message || 'Failed to send OTP';
+    } finally {
+      this.isLoading = false;
+    }
+  }
+
+  async verifyOtp() {
+    const user = this.supabaseService.supabase.auth.user();
+
+    if (user) {
+      this.router.navigate(['/dashboard']);
+    }
+  }
 }
+
+
