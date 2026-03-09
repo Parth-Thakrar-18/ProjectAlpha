@@ -11,6 +11,9 @@ export class SupabaseService {
     'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5vamhldHNqd2hub2xmdnBuemJjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI3NzQwMTcsImV4cCI6MjA4ODM1MDAxN30.yuNmAvssYXkrPZu_zjMf6_X-iOneZShRO-YQpZruU9A'
   );
 
+  isOtpVerified: boolean = false;
+  otpSent: boolean = false;
+
   constructor() { }
 
   async getData() {
@@ -56,5 +59,21 @@ export class SupabaseService {
     return { session, error };
   }
 
+  async signInWithProvider(provider: 'google' | 'facebook' | 'github' | 'twitter') {
+    const { user, session, error } = await this.supabase.auth.signIn({
+      provider: provider
+    });
+    return { user, session, error };
+  }
+
+  async resetPasswordForEmail(email: string) {
+    const { data, error } = await this.supabase.auth.api.resetPasswordForEmail(email);
+    return { data, error };
+  }
+
+  async updatePassword(password: string) {
+    const { data, error } = await this.supabase.auth.update({ password });
+    return { data, error };
+  }
 
 }

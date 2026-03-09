@@ -78,8 +78,7 @@ export class LoginComponent implements OnInit {
   }
 
   forgotPassword(): void {
-    console.log('Forgot password clicked');
-    // TODO: Navigate to forgot password page
+    this.router.navigate(['/forgot-password']);
   }
 
   createAccount(): void {
@@ -116,6 +115,25 @@ export class LoginComponent implements OnInit {
 
     if (user) {
       this.router.navigate(['/dashboard']);
+    }
+  }
+
+  async loginWithProvider(provider: 'google' | 'facebook') {
+    this.isLoading = true;
+    this.errorMessage = '';
+    this.successMessage = '';
+    
+    try {
+      const { error } = await this.supabaseService.signInWithProvider(provider);
+      
+      if (error) {
+        this.errorMessage = error.message;
+      }
+      // Note: Oauth will typically result in a redirect, so execution may pause here.
+    } catch (err: any) {
+      this.errorMessage = err.message || `Failed to login with ${provider}`;
+    } finally {
+      this.isLoading = false;
     }
   }
 }

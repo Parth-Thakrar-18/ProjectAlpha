@@ -10,6 +10,8 @@ import { SignupComponent } from './signup/signup.component';
 import { AuthComponent } from './auth/auth.component';
 import { DashboardComponent } from './dashboard/dashboard.component';
 import { OTPComponent } from './otp/otp.component';
+import { ForgotPasswordComponent } from './forgot-password/forgot-password.component';
+import { ResetPasswordComponent } from './reset-password/reset-password.component';
 
 @NgModule({
   declarations: [
@@ -18,7 +20,9 @@ import { OTPComponent } from './otp/otp.component';
     SignupComponent,
     AuthComponent,
     DashboardComponent,
-    OTPComponent
+    OTPComponent,
+    ForgotPasswordComponent,
+    ResetPasswordComponent
   ],
   imports: [
     BrowserModule,
