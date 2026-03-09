@@ -111,6 +111,7 @@ export class OTPComponent implements OnInit, AfterViewInit {
         this.focusInput(0);
       } else {
         this.successMessage = 'OTP Verified! Redirecting...';
+        this.supabaseService.isOtpVerified = true;
         setTimeout(() => {
           this.isLoading = false;
           this.router.navigate(['/dashboard']);
@@ -154,10 +155,7 @@ export class OTPComponent implements OnInit, AfterViewInit {
   }
 
   async verifyOtp() {
-    const user = this.supabaseService.supabase.auth.user();
-
-    if (user) {
-      this.router.navigate(['/dashboard']);
-    }
+    // Rely on app.component.ts logic instead of auto-verifying if user object exists.
+    // If they got here, they need to input an actual OTP.
   }
 }
