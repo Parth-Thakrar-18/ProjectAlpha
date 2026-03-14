@@ -16,6 +16,12 @@ export class LoginComponent implements OnInit {
   @Output() switchToSignup = new EventEmitter<void>();
   email: any;
 
+  // Rate Limiting Variables
+  failedLoginAttempts = 0;
+  loginLockoutUntil: number | null = null;
+  lockoutTimer: any;
+  lockoutRemaining = 0;
+
   constructor(private formBuilder: FormBuilder,
     private supabaseService: SupabaseService,
     private router: Router
@@ -23,6 +29,64 @@ export class LoginComponent implements OnInit {
 
   ngOnInit(): void {
     this.initializeForm();
+    this.checkLockoutState();
+  }
+
+  checkLockoutState(): void {
+    const lockoutUntilStr = localStorage.getItem('loginLockoutUntil');
+    const attemptsStr = localStorage.getItem('failedLoginAttempts');
+    
+    if (attemptsStr) {
+      this.failedLoginAttempts = parseInt(attemptsStr, 10);
+    }
+    
+    if (lockoutUntilStr) {
+      this.loginLockoutUntil = parseInt(lockoutUntilStr, 10);
+      this.startLockoutTimer();
+    }
+  }
+
+  startLockoutTimer(): void {
+    if (!this.loginLockoutUntil) return;
+    
+    this.isLoading = true; // Disable form while locked out
+    
+    this.lockoutTimer = setInterval(() => {
+      if (!this.loginLockoutUntil) return;
+      
+      const now = Date.now();
+      const remaining = Math.ceil((this.loginLockoutUntil - now) / 1000);
+      
+      if (remaining <= 0) {
+        // Lockout expired
+        clearInterval(this.lockoutTimer);
+        this.loginLockoutUntil = null;
+        this.failedLoginAttempts = 0;
+        this.lockoutRemaining = 0;
+        this.errorMessage = '';
+        this.isLoading = false;
+        localStorage.removeItem('loginLockoutUntil');
+        localStorage.removeItem('failedLoginAttempts');
+      } else {
+        this.lockoutRemaining = remaining;
+        this.errorMessage = `Too many failed attempts. Try again in ${remaining}s.`;
+      }
+    }, 1000);
+  }
+
+  handleFailedAttempt(message: string): void {
+    this.failedLoginAttempts++;
+    localStorage.setItem('failedLoginAttempts', this.failedLoginAttempts.toString());
+    
+    if (this.failedLoginAttempts >= 4) {
+      // Lock out for 1 minute (60000 ms)
+      this.loginLockoutUntil = Date.now() + 60000;
+      localStorage.setItem('loginLockoutUntil', this.loginLockoutUntil.toString());
+      this.startLockoutTimer();
+    } else {
+      this.errorMessage = `${message} (${4 - this.failedLoginAttempts} attempts remaining before 1m lockout)`;
+      this.isLoading = false;
+    }
   }
 
   initializeForm(): void {
@@ -37,13 +101,17 @@ export class LoginComponent implements OnInit {
     return this.loginForm.controls;
   }
 
-  async onSubmit(): Promise<void> {
+  async onSubmit(): Promise<boolean> {
     this.submitted = true;
     this.errorMessage = '';
     this.successMessage = '';
 
+    if (this.loginLockoutUntil && Date.now() < this.loginLockoutUntil) {
+      return false; // Already locked out
+    }
+
     if (this.loginForm.invalid) {
-      return;
+      return false;
     }
 
     this.isLoading = true;
@@ -51,17 +119,20 @@ export class LoginComponent implements OnInit {
     const { email, password } = this.loginForm.value;
 
     const users = await this.supabaseService.getData();
-    const user = users?.find((u: any) => u.email === email);
-    if (!user) {
-      this.errorMessage = 'No user found';
-      this.isLoading = false;
-      return;
+    const user = users?.filter((u: any) => u.email === email);
+    if (user.length === 0) {
+      this.handleFailedAttempt('No user found');
+      return false;
     }
-    if (user.password !== password) {
-      this.errorMessage = 'Incorrect password';
-      this.isLoading = false;
-      return;
+    if (user[0].password !== password) {
+      this.handleFailedAttempt('Incorrect password');
+      return false;
     }
+
+    // Success - reset counters
+    this.failedLoginAttempts = 0;
+    localStorage.removeItem('failedLoginAttempts');
+    localStorage.removeItem('loginLockoutUntil');
 
     this.successMessage = 'Login successful!';
 
@@ -69,6 +140,8 @@ export class LoginComponent implements OnInit {
       this.isLoading = false;
       this.router.navigate(['/otp']);
     }, 1000);
+
+    return true;
   }
 
   resetForm(): void {
@@ -85,6 +158,11 @@ export class LoginComponent implements OnInit {
     this.router.navigate(['/signup']);
   }
   async sendOtp() {
+    const loginSuccess = await this.onSubmit();
+    if (!loginSuccess) {
+      return;
+    }
+
     this.isLoading = true;
     this.errorMessage = '';
     this.successMessage = '';
@@ -98,6 +176,7 @@ export class LoginComponent implements OnInit {
       if (error) {
         this.errorMessage = error.message;
       } else {
+        this.supabaseService.otpSent = true;
         this.successMessage = `OTP sent to ${targetEmail}`;
         // Optionally clear success message after 5 seconds
         setTimeout(() => this.successMessage = '', 5000);
@@ -122,10 +201,10 @@ export class LoginComponent implements OnInit {
     this.isLoading = true;
     this.errorMessage = '';
     this.successMessage = '';
-    
+
     try {
       const { error } = await this.supabaseService.signInWithProvider(provider);
-      
+
       if (error) {
         this.errorMessage = error.message;
       }

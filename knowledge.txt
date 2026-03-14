@@ -1,0 +1,79 @@
+# Project Alpha Knowledge Document
+
+## 1. Project Overview
+**Project Name:** Project Alpha
+**Core Framework:** Angular (v11.x)
+**Language:** TypeScript, HTML5, CSS3
+**Backend/Database:** Supabase (BaaS)
+**Containerization:** Docker
+
+Project Alpha is a secure, modernized web web application featuring a robust authentication system. It utilizes Supabase for identity management and database services, and is architected with strict routing security and client-side abuse-prevention systems.
+
+---
+
+## 2. Core Functionalities & Features
+
+### A. Authentication System
+The application features a comprehensive authentication flow powered by Supabase Auth:
+- **Email & Password:** Standard signup and sign-in functionality.
+- **OTP Verification (Magic Link):** After successful credential validation (or for passwordless flows), the system dispatches an OTP. The user must verify this OTP to gain full access to the dashboard.
+- **Single Sign-On (SSO):** Integration points for Google and Facebook OAuth.
+- **Account Recovery:** Forgot password and Reset password workflows.
+
+### B. Route Security & Guards
+To prevent unauthorized navigation via the address bar (specifically handling Hash Location Strategy `/#/`), strict routing guards are implemented:
+- **AuthGuard (`auth.guard.ts`):** Protects the `/dashboard`. Checks if a valid session exists AND if the OTP has been verified. Redirects to login otherwise.
+- **NoAuthGuard (`no-auth.guard.ts`):** Prevents fully authenticated users from returning to public auth pages (`/login`, `/signup`, `/forgot-password`). Bounces them back to the dashboard.
+- **OtpAccessGuard (`otp-access.guard.ts`):** Protects the `/otp` verification page. Ensures users can only view this page while actively in the auth-flow (e.g., OTP has just been sent to them).
+
+### C. Rate Limiting & Brute-Force Protection
+Client-side rate limiting is enforced on sensitive endpoints using `localStorage` to ensure persistence across page resets:
+- **Login Password Attempts:** Users are locked out for 60 seconds after 4 incorrect password attempts.
+- **OTP Verification Attempts:** Users are locked out for 60 seconds after 4 incorrect OTP entries.
+- UI features a dynamic countdown timer indicating when the lockout will expire, during which all input is disabled.
+
+### D. Containerization
+The project includes a `Dockerfile` for standardized deployments:
+- Uses Node image to install dependencies and run the Angular CLI development server.
+- The `npm start` script has been patched to include `--host 0.0.0.0`, ensuring the dev server accepts connections from outside the Docker network.
+- Explicitly exposes port `4200`.
+
+---
+
+## 3. Code Quality & Architecture
+
+### Structure
+- **Modular Components:** Feature-separated component structure (`LoginComponent`, `OTPComponent`, `DashboardComponent`, etc.).
+- **Centralized Services:** The `SupabaseService` acts as a Singleton, wrapping the official Supabase Client. This isolates database configuration and API calls from the UI logic.
+- **Reactive Forms:** Heavy usage of Angular's Reactive Forms (`FormBuilder`, `FormGroup`, `Validators`). For example, the OTP input uses a `FormArray` for a seamless 6-digit input experience.
+
+### User Experience (UX)
+- Animations for state transitions (fade-ins, slide-ups).
+- Clear, dynamic error and success messaging without jarring alerts (except for severe navigational blocks).
+- Graceful degradation: Loading spinners disable buttons to prevent double-submissions.
+- Paste-handling on the OTP screen automatically populates multiple input boxes.
+
+### Areas for Improvement / Technical Debt
+- **Environment Variables:** Currently, Supabase connection URLs and Anon Keys reside strictly in the `SupabaseService`. In a production environment, this should be moved to Angular's `environment.ts` / `environment.prod.ts` files or injected at runtime.
+- **Server-Side Validation:** While client-side rate limiters are excellent for UX deterrence, highly secure applications should mirror this rate limiting on the backend server or API gateway.
+- **Dependencies:** The application uses an older version of Angular (~11.2) and Node compatibility flags (`--openssl-legacy-provider`). A framework upgrade is recommended in the future.
+
+---
+
+## 4. Usage & Execution Instructions
+
+### Local Development (Without Docker)
+1. Navigate to the project directory: `cd ProjectAlpha`
+2. Install dependencies: `npm install`
+3. Start the application: `npm start`
+4. Access in browser: `http://localhost:4200`
+
+### Docker Deployment
+The environment can be entirely spun up in a container.
+1. Build the Docker image:
+   `docker build -t projectalpha .`
+   
+2. Run the Docker container, mapping host port 4200 to container port 4200:
+   `docker run -p 4200:4200 projectalpha`
+   
+3. Access in browser: `http://localhost:4200`

@@ -16,6 +16,13 @@ export class OTPComponent implements OnInit, AfterViewInit {
   successMessage = '';
   email = '';
   otp = '';
+  
+  // Rate Limiting Variables
+  failedOtpAttempts = 0;
+  otpLockoutUntil: number | null = null;
+  lockoutTimer: any;
+  lockoutRemaining = 0;
+
   @ViewChildren('otpInput') otpInputs!: QueryList<ElementRef>;
 
   constructor(private fb: FormBuilder, private router: Router,
@@ -33,6 +40,69 @@ export class OTPComponent implements OnInit, AfterViewInit {
         Array(6).fill('').map(() => new FormControl('', [Validators.required, Validators.pattern('^[0-9]$')]))
       )
     });
+    this.checkLockoutState();
+  }
+
+  checkLockoutState(): void {
+    const lockoutUntilStr = localStorage.getItem('otpLockoutUntil');
+    const attemptsStr = localStorage.getItem('failedOtpAttempts');
+    
+    if (attemptsStr) {
+      this.failedOtpAttempts = parseInt(attemptsStr, 10);
+    }
+    
+    if (lockoutUntilStr) {
+      this.otpLockoutUntil = parseInt(lockoutUntilStr, 10);
+      this.startLockoutTimer();
+    }
+  }
+
+  startLockoutTimer(): void {
+    if (!this.otpLockoutUntil) return;
+    
+    this.isLoading = true; // Disable form while locked out
+    this.otpForm.disable();
+    
+    this.lockoutTimer = setInterval(() => {
+      if (!this.otpLockoutUntil) return;
+      
+      const now = Date.now();
+      const remaining = Math.ceil((this.otpLockoutUntil - now) / 1000);
+      
+      if (remaining <= 0) {
+        // Lockout expired
+        clearInterval(this.lockoutTimer);
+        this.otpLockoutUntil = null;
+        this.failedOtpAttempts = 0;
+        this.lockoutRemaining = 0;
+        this.errorMessage = '';
+        this.isLoading = false;
+        this.otpForm.enable();
+        localStorage.removeItem('otpLockoutUntil');
+        localStorage.removeItem('failedOtpAttempts');
+        this.focusInput(0);
+      } else {
+        this.lockoutRemaining = remaining;
+        this.errorMessage = `Too many failed attempts. Try again in ${remaining}s.`;
+      }
+    }, 1000);
+  }
+
+  handleFailedAttempt(message: string): void {
+    this.failedOtpAttempts++;
+    localStorage.setItem('failedOtpAttempts', this.failedOtpAttempts.toString());
+    
+    if (this.failedOtpAttempts >= 4) {
+      // Lock out for 1 minute (60000 ms)
+      this.otpLockoutUntil = Date.now() + 60000;
+      localStorage.setItem('otpLockoutUntil', this.otpLockoutUntil.toString());
+      this.startLockoutTimer();
+    } else {
+      this.errorMessage = `${message} (${4 - this.failedOtpAttempts} attempts remaining before 1m lockout)`;
+      this.isLoading = false;
+      this.digitsArr.controls.forEach(control => control.setValue(''));
+      this.focusInput(0);
+    }
   }
 
   ngAfterViewInit() {
@@ -90,6 +160,10 @@ export class OTPComponent implements OnInit, AfterViewInit {
     this.submitted = true;
     this.errorMessage = '';
 
+    if (this.otpLockoutUntil && Date.now() < this.otpLockoutUntil) {
+      return; // Already locked out
+    }
+
     if (this.otpForm.invalid) {
       this.otpForm.markAllAsTouched();
       return;
@@ -105,11 +179,13 @@ export class OTPComponent implements OnInit, AfterViewInit {
       const { session, error } = await this.supabaseService.verifyOtp(targetEmail, otpValue);
 
       if (error) {
-        this.errorMessage = 'Invalid OTP code. Please try again.';
-        this.isLoading = false;
-        this.digitsArr.controls.forEach(control => control.setValue(''));
-        this.focusInput(0);
+        this.handleFailedAttempt('Invalid OTP code. Please try again.');
       } else {
+        // Success - reset counters
+        this.failedOtpAttempts = 0;
+        localStorage.removeItem('failedOtpAttempts');
+        localStorage.removeItem('otpLockoutUntil');
+
         this.successMessage = 'OTP Verified! Redirecting...';
         this.supabaseService.isOtpVerified = true;
         setTimeout(() => {
